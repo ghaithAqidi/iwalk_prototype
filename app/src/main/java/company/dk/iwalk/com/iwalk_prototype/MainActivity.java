@@ -56,12 +56,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     double[] differnceInDistance2 = new double[128];
     LocationObject loc = null;
     File testFile;
-    boolean isRecording = false;
+    boolean isRecording = true;
     ArrayList<Instances> dataArray = new ArrayList<>();
-    int samplesToRecord = 0;
+    int samplesToRecord = 1;
 
 
-    String[] perms = {"android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION","android.permission.ACCESS_FINE_LOCATION", "android.permission.INTERNET", "android.hardware.location.gps"};
+    String[] perms = {"android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION", "android.permission.INTERNET", "android.hardware.location.gps"};
 
     int permsRequestCode = 200;
 
@@ -84,7 +84,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             ObjectInputStream ois = new ObjectInputStream(assetMgr.open("jtree3.model"));
             J48 cls = (J48) ois.readObject();
             ois.close();
-        }catch (Exception e){
+        } catch (Exception e) {
             System.out.println(e);
         }
 
@@ -135,8 +135,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             record(sensorEvent);
             if (resultArray2.size() == samplesToRecord) {
                 isRecording = false;
-                TextView tvId = (TextView) findViewById(R.id.text);
+                TextView tvId = (TextView) findViewById(R.id.current_activity);
                 tvId.setText(resultArray2.size() + " samples logged");
+                printData();
             }
         }
     }
@@ -235,7 +236,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         res.setMax(max);
         res.setMin(min);
         res.setStandardDiviation(standarDeviation);
-        TextView tvId = (TextView) findViewById(R.id.text);
+        TextView tvId = (TextView) findViewById(R.id.current_activity);
 
         double accumulator = 0;
         //disntance calculations:
@@ -333,18 +334,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             weka.core.converters.ArffSaver arffSaverInstance = new weka.core.converters.ArffSaver();
             arffSaverInstance.setInstances(instances);
 
-            File dir2 = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
-
-
             File file = new File(dir + File.separator + fileName + ".arff");
             File file2 = new File(dir + File.separator + "test" + ".arff");
-            /*
-            BufferedWriter writer = new BufferedWriter(
-                    new FileWriter("/model/dump.arff"));
-            writer.write(instances.toString());
-            writer.newLine();
-            writer.flush();
-            writer.close();*/
 
             try {
                 arffSaverInstance.setFile(file);
@@ -359,15 +350,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         } catch (Exception e) {
             System.out.println(e);
         }
-    }
-
-
-    public void buttonUpkeep() {
-        System.out.println("acc changed");
-        samplesToRecord = samplesToRecord + 2;
-        sampleCounter1 = 0;
-        sampleCounter2 = 0;
-        startCounter2 = false;
     }
 
     public static double distance(double lat1, double lat2, double lon1, double lon2) {
@@ -409,7 +391,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             for (int i = 0; i < unlabeled.numInstances(); i++) {
                 double clsLabel = cls.classifyInstance(unlabeled.instance(i));
                 labeled.instance(i).setClassValue(clsLabel);
-                System.out.println(labeled.instance(i).getClass());
+                TextView tvId = (TextView) findViewById(R.id.current_activity);
+
+                if (clsLabel == 0) {
+                    tvId.setText("WE ARE STATIONARY!!!");
+                } else if (clsLabel == 1) {
+                    tvId.setText("WE ARE WALKING!!!");
+
+                } else {
+                    tvId.setText("DRIVING IS COOOL!");
+                }
 
             }
         } catch (Exception e) {
