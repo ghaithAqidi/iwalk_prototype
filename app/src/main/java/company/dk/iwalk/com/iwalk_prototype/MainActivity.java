@@ -59,6 +59,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     boolean isRecording = true;
     ArrayList<Instances> dataArray = new ArrayList<>();
     int samplesToRecord = 1;
+    int lazyCounter = 0;
+    int lazyCounterMAX = 5;
+    boolean isLazy = false;
 
 
     String[] perms = {"android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION", "android.permission.INTERNET", "android.hardware.location.gps"};
@@ -79,9 +82,26 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             requestPermissions(perms, permsRequestCode);
         }
+
+        final Button dnd = (Button) findViewById(R.id.dnd);
+        dnd.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                if (isRecording){
+                    isRecording = false;
+                    dnd.setText("Do NOT DISTURB");
+
+                }else{
+                    isRecording = true;
+                    dnd.setText("Distrub me, I want to be active!");
+                }
+
+
+            }
+        });
+
         AssetManager assetMgr = this.getAssets();
         try {
-            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("jtree3.model"));
+            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("j48new.model"));
             J48 cls = (J48) ois.readObject();
             ois.close();
         } catch (Exception e) {
@@ -131,13 +151,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     public void onSensorChanged(SensorEvent sensorEvent) {
         if (isRecording) {
             loc = myLocationListner.getCurrentLocationInformation();
-            System.out.println(sampleCounter1 + "  :  " + sampleCounter2);
             record(sensorEvent);
             if (resultArray2.size() == samplesToRecord) {
-                isRecording = false;
                 TextView tvId = (TextView) findViewById(R.id.current_activity);
                 tvId.setText(resultArray2.size() + " samples logged");
                 printData();
+                samplesToRecord++;
             }
         }
     }
@@ -306,7 +325,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
 
         for (int i = 0; i < resultArray2.size(); i++) {
-
             double[] vals = new double[7];
             vals[0] = (Double.parseDouble(Float.toString(resultArray2.get(i).getMin())));
             vals[1] = (Double.parseDouble(Float.toString(resultArray2.get(i).getMax())));
@@ -321,11 +339,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             data.add(new weka.core.Instance(1.0, datas2.get(i)));
         }
 
-        dataArray.add(data);
-        System.out.println(data);
-        saveArff(data, "testData");
+        Instances classifiedData = classifyData(data);
+        dataArray.add(classifiedData );
+        System.out.println("Classified data:");
+        System.out.println(classifiedData );
+        saveArff(classifiedData , "testData");
 
-        classifyData();
     }
 
     public static void saveArff(weka.core.Instances instances, String fileName) {
@@ -366,28 +385,27 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         return Math.sqrt(distance);
     }
 
-    public void classifyData() {
+    public Instances classifyData(Instances instances) {
+        Instances labeled = null;
         try {
             AssetManager assetMgr = this.getAssets();
 
-            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("jtree3.model"));
+            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("j48new.model"));
             J48 cls = (J48) ois.readObject();
             ois.close();
 
             testFile = new File(this.getFilesDir(), "test");
 
             // load unlabeled data
-            Instances unlabeled = new Instances(
-                    new BufferedReader(
-                            new FileReader(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) + File.separator + "test" + ".arff")));
+            Instances unlabeled = instances;
 
             // set class attribute
             unlabeled.setClassIndex(unlabeled.numAttributes() - 1);
 
             // create copy
-            Instances labeled = new Instances(unlabeled);
-
+            labeled = new Instances(unlabeled);
             // label instances
+            System.out.println("number of instances: " + unlabeled.numInstances());
             for (int i = 0; i < unlabeled.numInstances(); i++) {
                 double clsLabel = cls.classifyInstance(unlabeled.instance(i));
                 labeled.instance(i).setClassValue(clsLabel);
@@ -395,18 +413,39 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                 if (clsLabel == 0) {
                     tvId.setText("WE ARE STATIONARY!!!");
+                    isLazy = true;
                 } else if (clsLabel == 1) {
                     tvId.setText("WE ARE WALKING!!!");
+                    isLazy = false;
 
                 } else {
                     tvId.setText("DRIVING IS COOOL!");
+                    isLazy = false;
                 }
+            }
 
+            if(isLazy){
+                lazyCounter++;
+                System.out.println(lazyCounter);
+                TextView consoleID = (TextView) findViewById(R.id.console);
+                consoleID.setText( "lazyCounter: " + lazyCounter);
+            }
+
+            if(lazyCounter>lazyCounterMAX){
+                prompUser();
+                lazyCounter = 0;
+                //lazyCounterMAX = lazyCounterMAX-5;
+                resultArray1 = new ArrayList<>();
+                resultArray2 = new ArrayList<>();
             }
         } catch (Exception e) {
             System.out.println(e);
         }
+        return new Instances(labeled);
+    }
 
-
+    private void prompUser() {
+        MediaPlayer mp = MediaPlayer.create(getApplicationContext(), R.raw.dings);
+        mp.start();
     }
 }
