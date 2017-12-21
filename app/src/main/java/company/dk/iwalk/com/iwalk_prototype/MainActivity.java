@@ -13,6 +13,7 @@ import android.location.LocationManager;
 import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.os.Environment;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
@@ -23,6 +24,7 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 
 import java.io.BufferedReader;
@@ -37,6 +39,8 @@ import company.dk.iwalk.com.iwalk_prototype.helper.LocationObject;
 import company.dk.iwalk.com.iwalk_prototype.helper.Result;
 import weka.classifiers.trees.J48;
 import weka.core.Instances;
+
+import static company.dk.iwalk.com.iwalk_prototype.R.id.time;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
     private SensorManager mSensorManager;
@@ -62,7 +66,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     int lazyCounter = 0;
     int lazyCounterMAX = 5;
     boolean isLazy = false;
-
+    int samplesTillNotLazy = 0;
+    int samplesResetMax = 8;
+    int innerCounter = 1;
+    int minutes = 0;
+    TextView textTimer;
+    int numberOfsecondsSnoozing;
 
     String[] perms = {"android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION", "android.permission.INTERNET", "android.hardware.location.gps"};
 
@@ -86,13 +95,50 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         final Button dnd = (Button) findViewById(R.id.dnd);
         dnd.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                if (isRecording){
-                    isRecording = false;
-                    dnd.setText("Do NOT DISTURB");
+                if (isRecording) {
+                    TextView minutesInput = (EditText) findViewById(R.id.lazyTimerSleep);
+                    minutes = Integer.parseInt(minutesInput.getText().toString());
+                    numberOfsecondsSnoozing = Integer.parseInt(minutesInput.getText().toString()) * 60;
+                    textTimer = (TextView) findViewById(R.id.timerView);
 
-                }else{
+                    new CountDownTimer(numberOfsecondsSnoozing * 1000, 1000) {
+
+                        public void onTick(long millisUntilFinished) {
+                            if (numberOfsecondsSnoozing <= 0) {
+                                this.cancel();
+                            } else {
+                                innerCounter--;
+
+                                textTimer.setText(minutes + ":" + innerCounter);
+
+                                numberOfsecondsSnoozing--;
+                                if (innerCounter == 0) {
+                                    innerCounter = 59;
+                                    minutes -= 1;
+                                }
+                                isRecording = false;
+                                dnd.setText("App is snoozing, click to activate");
+                            }
+
+
+                        }
+
+                        public void onFinish() {
+                            textTimer.setText("The app is active now.");
+                            isRecording = true;
+                            dnd.setText("Give me a break");
+                        }
+
+                    }.start();
+
+
+                } else {
+                    //it means we are snoozing, so we reset the counter and get active!
+                    numberOfsecondsSnoozing = 0;
+                    textTimer.setText("The app is active now.");
                     isRecording = true;
                     dnd.setText("Distrub me, I want to be active!");
+                    textTimer = (TextView) findViewById(R.id.timerView);
                 }
 
 
@@ -101,11 +147,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         AssetManager assetMgr = this.getAssets();
         try {
-            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("j48new.model"));
+            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("treeFinal.model"));
             J48 cls = (J48) ois.readObject();
             ois.close();
         } catch (Exception e) {
-            System.out.println(e);
+
         }
 
 
@@ -156,7 +202,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 TextView tvId = (TextView) findViewById(R.id.current_activity);
                 tvId.setText(resultArray2.size() + " samples logged");
                 printData();
-                samplesToRecord++;
+                resultArray1 = new ArrayList<>();
+                resultArray2 = new ArrayList<>();
             }
         }
     }
@@ -187,7 +234,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             resultArray1.add(calcualteStandardDiviation(sampleArray1, differnceInDistance1, loc.getLongitude(), loc.getLatitude()));
             sampleCounter1 = 0;
             sampleArray1[sampleCounter1] = sample;
-            sampleCounter1++;
         }
 
         if (startCounter2) {
@@ -205,15 +251,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 }
                 sampleCounter2++;
             } else {
-                for (int i = 0; i < differnceInDistance2.length; i++) {
-                    System.out.println(differnceInDistance2[i]);
-                }
                 differnceInDistance2[0] = 0;
                 locationObjects2.add(sampleCounter2, loc);
                 resultArray2.add(calcualteStandardDiviation(sampleArray2, differnceInDistance2, loc.getLongitude(), loc.getLatitude()));
                 sampleCounter2 = 0;
                 sampleArray2[sampleCounter2] = sample;
-                sampleCounter2++;
             }
         }
     }
@@ -274,8 +316,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         atts = new weka.core.FastVector();
         attvals = new weka.core.FastVector();
         //for holding the datapoints
-        ArrayList<double[]> datas = new ArrayList<double[]>();
-        ArrayList<double[]> datas2 = new ArrayList<double[]>();
+        ArrayList<double[]> datas = new ArrayList<>();
+        ArrayList<double[]> datas2 = new ArrayList<>();
 
         //create the attributes of the data
         weka.core.Attribute min = new weka.core.Attribute("min");
@@ -290,48 +332,49 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         weka.core.Attribute distance = new weka.core.Attribute("distance");
         atts.addElement(distance);
 
-        weka.core.Attribute longitude = new weka.core.Attribute("longitude");
+        /*weka.core.Attribute longitude = new weka.core.Attribute("longitude");
         atts.addElement(longitude);
 
         weka.core.Attribute latitude = new weka.core.Attribute("latitude");
-        atts.addElement(latitude);
+        atts.addElement(latitude);*/
 
 
         attvals.addElement("Stationary");
-        attvals.addElement("Walk");
+        attvals.addElement("Active");
         attvals.addElement("Transport");
 
         atts.addElement(new weka.core.Attribute("current activity", attvals));
 
         //initialize datasets
         weka.core.Instances data;
-        data = new weka.core.Instances("MyRelation", atts, 0);
 
+        data = new weka.core.Instances("MyRelation", atts, 0);
         //add datapoints to the dataset
+        //System.out.println(resultArray1.size());
         for (int i = 0; i < resultArray1.size(); i++) {
 
-            double[] vals = new double[7];
+            double[] vals = new double[5];
             vals[0] = (Double.parseDouble(Float.toString(resultArray1.get(i).getMin())));
             vals[1] = (Double.parseDouble(Float.toString(resultArray1.get(i).getMax())));
             vals[2] = (Double.parseDouble(Float.toString(resultArray1.get(i).getStandardDiviation())));
             vals[3] = resultArray1.get(i).getDistance();
-            vals[4] = resultArray1.get(i).getLongitude();
-            vals[5] = resultArray1.get(i).getLatitude();
+            //vals[4] = resultArray1.get(i).getLongitude();
+            //vals[5] = resultArray1.get(i).getLatitude();
 
             //add vals to datapoints
             datas.add(vals);
             //add datapoints to the print
             data.add(new weka.core.Instance(1.0, datas.get(i)));
         }
-
+        resultArray1 = new ArrayList<>();
         for (int i = 0; i < resultArray2.size(); i++) {
-            double[] vals = new double[7];
+            double[] vals = new double[5];
             vals[0] = (Double.parseDouble(Float.toString(resultArray2.get(i).getMin())));
             vals[1] = (Double.parseDouble(Float.toString(resultArray2.get(i).getMax())));
             vals[2] = (Double.parseDouble(Float.toString(resultArray2.get(i).getStandardDiviation())));
             vals[3] = resultArray2.get(i).getDistance();
-            vals[4] = resultArray2.get(i).getLongitude();
-            vals[5] = resultArray2.get(i).getLatitude();
+           // vals[4] = resultArray2.get(i).getLongitude();
+           // vals[5] = resultArray2.get(i).getLatitude();
 
             //add vals to datapoints
             datas2.add(vals);
@@ -339,36 +382,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             data.add(new weka.core.Instance(1.0, datas2.get(i)));
         }
 
-        Instances classifiedData = classifyData(data);
-        dataArray.add(classifiedData );
-        System.out.println("Classified data:");
-        System.out.println(classifiedData );
-        saveArff(classifiedData , "testData");
+        resultArray2 = new ArrayList<>();
+        //we get 4 here System.out.println(data.numInstances());
 
-    }
-
-    public static void saveArff(weka.core.Instances instances, String fileName) {
-        try {
-            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
-            weka.core.converters.ArffSaver arffSaverInstance = new weka.core.converters.ArffSaver();
-            arffSaverInstance.setInstances(instances);
-
-            File file = new File(dir + File.separator + fileName + ".arff");
-            File file2 = new File(dir + File.separator + "test" + ".arff");
-
-            try {
-                arffSaverInstance.setFile(file);
-                arffSaverInstance.writeBatch();
-                System.out.println("Made file at:" + dir);
-
-                arffSaverInstance.setFile(file2);
-                arffSaverInstance.writeBatch();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        } catch (Exception e) {
-            System.out.println(e);
-        }
+        classifyData(data);
     }
 
     public static double distance(double lat1, double lat2, double lon1, double lon2) {
@@ -390,7 +407,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         try {
             AssetManager assetMgr = this.getAssets();
 
-            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("j48new.model"));
+            ObjectInputStream ois = new ObjectInputStream(assetMgr.open("treeFinal.model"));
             J48 cls = (J48) ois.readObject();
             ois.close();
 
@@ -405,42 +422,55 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             // create copy
             labeled = new Instances(unlabeled);
             // label instances
-            System.out.println("number of instances: " + unlabeled.numInstances());
             for (int i = 0; i < unlabeled.numInstances(); i++) {
                 double clsLabel = cls.classifyInstance(unlabeled.instance(i));
                 labeled.instance(i).setClassValue(clsLabel);
                 TextView tvId = (TextView) findViewById(R.id.current_activity);
-
-                if (clsLabel == 0) {
-                    tvId.setText("WE ARE STATIONARY!!!");
+                System.out.println(clsLabel);
+                if (clsLabel == 0.0) {
+                    tvId.setText("we are stationary");
                     isLazy = true;
-                } else if (clsLabel == 1) {
-                    tvId.setText("WE ARE WALKING!!!");
+                } else if (clsLabel == 1.0) {
+                    tvId.setText("We are active");
                     isLazy = false;
-
                 } else {
-                    tvId.setText("DRIVING IS COOOL!");
+                    tvId.setText("We are transporting");
                     isLazy = false;
                 }
             }
+            unlabeled = null;
+            TextView consoleID = (TextView) findViewById(R.id.console);
 
-            if(isLazy){
+            if (isLazy) {
                 lazyCounter++;
-                System.out.println(lazyCounter);
-                TextView consoleID = (TextView) findViewById(R.id.console);
-                consoleID.setText( "lazyCounter: " + lazyCounter);
+                switch (lazyCounter) {
+                    case 1:
+                        lazyCounter = 1;
+                        consoleID.setText("hmmmmm, getting comfortable in that sofa?");
+                        break;
+                    case 2:
+                        lazyCounter = 4;
+                        consoleID.setText("Almost time to be active again...");
+                        break;
+                }
             }
-
-            if(lazyCounter>lazyCounterMAX){
+            samplesTillNotLazy++;
+            if (lazyCounter > lazyCounterMAX) {
                 prompUser();
                 lazyCounter = 0;
                 //lazyCounterMAX = lazyCounterMAX-5;
                 resultArray1 = new ArrayList<>();
                 resultArray2 = new ArrayList<>();
+                consoleID.setText("Time for a walk!!!");
+                MediaPlayer mp = MediaPlayer.create(getApplicationContext(), R.raw.dings);
+                mp.start();
             }
+
+
         } catch (Exception e) {
-            System.out.println(e);
+
         }
+
         return new Instances(labeled);
     }
 
